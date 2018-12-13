@@ -16,7 +16,7 @@ import java.util.stream.Collectors;
 
 public class LocalPrebuiltRuleComposer extends JvmBuckRuleComposer {
   /**
-   * @param dependencies External Dependencies whose rule needs to be created
+   * @param dependencies Local Dependencies whose rule needs to be created
    * @return List of rules
    */
   @SuppressWarnings("NullAway")

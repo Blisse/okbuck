@@ -39,10 +39,10 @@ public class PrebuiltRuleComposer extends JvmBuckRuleComposer {
                   new Prebuilt()
                       .mavenCoords(dependency.getMavenCoords())
                       .enableJetifier(dependency.enableJetifier())
-                      .sha256(DependencyUtils.sha256(dependency.getRealDependencyFile()));
+                      .sha256(DependencyUtils.shaSum256(dependency.getRealDependencyFile()));
 
               if (dependency.hasSourceFile()) {
-                rule.sourcesSha256(DependencyUtils.sha256(dependency.getRealSourceFile()));
+                rule.sourcesSha256(DependencyUtils.shaSum256(dependency.getRealSourceFile()));
               }
 
               rule.name(dependency.getTargetName());

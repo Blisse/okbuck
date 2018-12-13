@@ -25,7 +25,7 @@ public class HttpFileRuleComposer {
               Rule rule =
                   new HttpFile()
                       .mavenCoords(dependency.getMavenCoords())
-                      .sha256(DependencyUtils.sha256(dependency.getRealDependencyFile()))
+                      .sha256(DependencyUtils.shaSum256(dependency.getRealDependencyFile()))
                       .name(dependency.getTargetName());
               rule.name(dependency.getTargetName());
               return rule;

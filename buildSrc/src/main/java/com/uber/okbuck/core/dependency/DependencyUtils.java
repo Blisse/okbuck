@@ -17,7 +17,6 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.jar.JarFile;
 import java.util.stream.Collectors;
-import java.util.zip.ZipFile;
 import javax.annotation.Nullable;
 import org.apache.commons.io.FilenameUtils;
 import org.gradle.api.Project;
@@ -74,11 +73,11 @@ public final class DependencyUtils {
     return FilenameUtils.isExtension(file.getName(), ALLOWED_EXTENSIONS);
   }
 
-  public static String sha256(File file) {
+  public static String shaSum256(File file) {
     try {
       return Files.asByteSource(file).hash(Hashing.sha256()).toString();
     } catch (IOException e) {
-      throw new RuntimeException(String.format("Failed to calculate sha256 of %s", file));
+      throw new RuntimeException(String.format("Failed to calculate shaSum256 of %s", file));
     }
   }
 

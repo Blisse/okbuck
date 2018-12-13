@@ -7,7 +7,7 @@ import java.io.File;
 import javax.annotation.Nullable;
 import org.apache.commons.io.FilenameUtils;
 
-public class DependencyFactory {
+public final class DependencyFactory {
 
   private static final String LOCAL_GROUP = "local";
   private static final String LOCAL_DEP_VERSION = "1.0.0-LOCAL";
