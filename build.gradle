@@ -124,9 +124,11 @@ def addCommonConfigurationForAndroidModules(Project project) {
             project.android.sourceSets."${it.name}".kotlin.srcDir project.file("build/generated/source/sqldelight")
 
             project.afterEvaluate { proj ->
-                Task okbuckTask = proj.tasks.getByName("okbuck")
-                Task sqlDelightTask = proj.tasks.getByName("generate${it.name.capitalize()}SqlDelightInterface")
-                okbuckTask.dependsOn(sqlDelightTask)
+                TaskProvider<Task> okbuckTask = proj.tasks.named("okbuck")
+                TaskProvider<Task> sqlDelightTask = proj.tasks.named("generate${it.name.capitalize()}SqlDelightInterface")
+                okbuckTask.configure {
+                    dependsOn(sqlDelightTask)
+                }
             }
         }
     }

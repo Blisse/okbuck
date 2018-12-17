@@ -45,6 +45,7 @@ import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.Task;
 import org.gradle.api.artifacts.Configuration;
+import org.gradle.api.tasks.TaskProvider;
 
 // Dependency Tree
 //
@@ -112,9 +113,13 @@ public class OkBuckGradlePlugin implements Plugin<Project> {
     rootProject.afterEvaluate(
         rootBuckProject -> {
           // Create tasks
-          Task setupOkbuck = rootBuckProject.getTasks().create("setupOkbuck");
-          setupOkbuck.setGroup(GROUP);
-          setupOkbuck.setDescription("Setup okbuck cache and dependencies");
+          TaskProvider<Task> setupOkbuckTaskProvider =
+              rootBuckProject.getTasks().register("setupOkbuck");
+          setupOkbuckTaskProvider.configure(
+              setupOkbuckTask -> {
+                setupOkbuckTask.setGroup(GROUP);
+                setupOkbuckTask.setDescription("Setup okbuck cache and dependencies");
+              });
 
           // Create buck file manager.
           BuckFileManager buckFileManager =
@@ -157,39 +162,46 @@ public class OkBuckGradlePlugin implements Plugin<Project> {
           KotlinExtension kotlin = okbuckExt.getKotlinExtension();
           ScalaExtension scala = okbuckExt.getScalaExtension();
 
-          Task rootOkBuckTask =
-              rootBuckProject.getTasks().create(OKBUCK, OkBuckTask.class, okbuckExt, kotlin, scala);
-          rootOkBuckTask.dependsOn(setupOkbuck);
-          rootOkBuckTask.doLast(
-              task -> {
-                annotationProcessorCache.finalizeProcessors();
-                dependencyManager.finalizeDependencies();
-                jetifierManager.finalizeDependencies();
-                lintManager.finalizeDependencies();
-                kotlinManager.finalizeDependencies();
-                scalaManager.finalizeDependencies();
-                groovyManager.finalizeDependencies();
-                robolectricManager.finalizeDependencies();
-                transformManager.finalizeDependencies();
-                buckManager.finalizeDependencies();
-                manifestMergerManager.finalizeDependencies();
-                writeExportedFileRules(rootBuckProject, okbuckExt);
+          TaskProvider<OkBuckTask> rootOkBuckTaskProvider =
+              rootBuckProject
+                  .getTasks()
+                  .register(OKBUCK, OkBuckTask.class, okbuckExt, kotlin, scala);
 
-                // Reset root project's scope cache at the very end
-                ProjectCache.resetScopeCache(rootProject);
+          rootOkBuckTaskProvider.configure(
+              rootOkBuckTask -> {
+                rootOkBuckTask.dependsOn(setupOkbuckTaskProvider);
 
-                // Reset all project's target cache at the very end.
-                // This cannot be done for a project just after its okbuck task since,
-                // the target cache is accessed by other projects and have to
-                // be available until okbuck tasks of all the projects finishes.
-                ProjectCache.resetTargetCacheForAll(rootProject);
+                rootOkBuckTask.doLast(
+                    task -> {
+                      annotationProcessorCache.finalizeProcessors();
+                      dependencyManager.finalizeDependencies();
+                      jetifierManager.finalizeDependencies();
+                      lintManager.finalizeDependencies();
+                      kotlinManager.finalizeDependencies();
+                      scalaManager.finalizeDependencies();
+                      groovyManager.finalizeDependencies();
+                      robolectricManager.finalizeDependencies();
+                      transformManager.finalizeDependencies();
+                      buckManager.finalizeDependencies();
+                      manifestMergerManager.finalizeDependencies();
+                      writeExportedFileRules(rootBuckProject, okbuckExt);
+
+                      // Reset root project's scope cache at the very end
+                      ProjectCache.resetScopeCache(rootProject);
+
+                      // Reset all project's target cache at the very end.
+                      // This cannot be done for a project just after its okbuck task since,
+                      // the target cache is accessed by other projects and have to
+                      // be available until okbuck tasks of all the projects finishes.
+                      ProjectCache.resetTargetCacheForAll(rootProject);
+                    });
               });
 
           WrapperExtension wrapper = okbuckExt.getWrapperExtension();
           // Create wrapper task
           rootBuckProject
               .getTasks()
-              .create(
+              .register(
                   BUCK_WRAPPER,
                   BuckWrapperTask.class,
                   wrapper.repo,
@@ -218,69 +230,74 @@ public class OkBuckGradlePlugin implements Plugin<Project> {
                                   .getConfigurations()
                                   .maybeCreate(cacheName + "ExtraDepCache")));
 
-          setupOkbuck.doFirst(
-              task -> {
-                if (System.getProperty("okbuck.wrapper", "false").equals("false")) {
-                  throw new IllegalArgumentException(
-                      "Okbuck cannot be invoked without 'okbuck.wrapper' set to true. Use buckw instead");
-                }
-              });
-
           // Configure setup task
-          setupOkbuck.doLast(
-              task -> {
-                // Init all project's target cache at the very start since a project
-                // can access other project's target cache. Hence, all target cache
-                // needs to be initialized before any okbuck task starts.
-                ProjectCache.initTargetCacheForAll(rootProject);
+          setupOkbuckTaskProvider.configure(
+              setupOkbuckTask -> {
+                setupOkbuckTask.doFirst(
+                    task -> {
+                      if (System.getProperty("okbuck.wrapper", "false").equals("false")) {
+                        throw new IllegalArgumentException(
+                            "Okbuck cannot be invoked without 'okbuck.wrapper' set to true. Use buckw instead");
+                      }
+                    });
 
-                // Init root project's scope cache.
-                ProjectCache.initScopeCache(rootProject);
+                setupOkbuckTask.doLast(
+                    task -> {
+                      // Init all project's target cache at the very start since a project
+                      // can access other project's target cache. Hence, all target cache
+                      // needs to be initialized before any okbuck task starts.
+                      ProjectCache.initTargetCacheForAll(rootProject);
 
-                depCache = new DependencyCache(rootBuckProject, dependencyManager, FORCED_OKBUCK);
+                      // Init root project's scope cache.
+                      ProjectCache.initScopeCache(rootProject);
 
-                // Fetch Lint deps if needed
-                if (!okbuckExt.getLintExtension().disabled
-                    && okbuckExt.getLintExtension().version != null) {
-                  lintManager.fetchLintDeps(okbuckExt.getLintExtension().version);
-                }
+                      depCache =
+                          new DependencyCache(rootBuckProject, dependencyManager, FORCED_OKBUCK);
 
-                // Fetch transform deps if needed
-                if (!okbuckExt.getTransformExtension().transforms.isEmpty()) {
-                  transformManager.fetchTransformDeps();
-                }
+                      // Fetch Lint deps if needed
+                      if (!okbuckExt.getLintExtension().disabled
+                          && okbuckExt.getLintExtension().version != null) {
+                        lintManager.fetchLintDeps(okbuckExt.getLintExtension().version);
+                      }
 
-                // Setup d8 deps
-                D8Util.copyDeps(buckFileManager);
+                      // Fetch transform deps if needed
+                      if (!okbuckExt.getTransformExtension().transforms.isEmpty()) {
+                        transformManager.fetchTransformDeps();
+                      }
 
-                // Fetch robolectric deps if needed
-                if (okbuckExt.getTestExtension().robolectric) {
-                  robolectricManager.download();
-                }
+                      // Setup d8 deps
+                      D8Util.copyDeps(buckFileManager);
 
-                if (JetifierManager.isJetifierEnabled(rootProject)) {
-                  jetifierManager.setupJetifier(okbuckExt.getJetifierExtension().version);
-                }
+                      // Fetch robolectric deps if needed
+                      if (okbuckExt.getTestExtension().robolectric) {
+                        robolectricManager.download();
+                      }
 
-                extraConfigurations.forEach(
-                    (cacheName, extraConfiguration) ->
-                        new DependencyCache(
-                                rootBuckProject,
-                                dependencyManager,
-                                okbuckExt.extraDepCachesMap.getOrDefault(cacheName, false))
-                            .build(extraConfiguration));
+                      if (JetifierManager.isJetifierEnabled(rootProject)) {
+                        jetifierManager.setupJetifier(okbuckExt.getJetifierExtension().version);
+                      }
 
-                buckManager.setupBuckBinary();
+                      extraConfigurations.forEach(
+                          (cacheName, extraConfiguration) ->
+                              new DependencyCache(
+                                      rootBuckProject,
+                                      dependencyManager,
+                                      okbuckExt.extraDepCachesMap.getOrDefault(cacheName, false))
+                                  .build(extraConfiguration));
 
-                manifestMergerManager.fetchManifestMergerDeps();
+                      buckManager.setupBuckBinary();
+
+                      manifestMergerManager.fetchManifestMergerDeps();
+                    });
               });
 
           // Create clean task
-          Task okBuckClean =
+          TaskProvider<OkBuckCleanTask> okBuckCleanTaskProvider =
               rootBuckProject
                   .getTasks()
-                  .create(OKBUCK_CLEAN, OkBuckCleanTask.class, okbuckExt.buckProjects);
-          rootOkBuckTask.dependsOn(okBuckClean);
+                  .register(OKBUCK_CLEAN, OkBuckCleanTask.class, okbuckExt.buckProjects);
+          rootOkBuckTaskProvider.configure(
+              rootOkBuckTask -> rootOkBuckTask.dependsOn(okBuckCleanTaskProvider));
 
           // Create okbuck task on each project to generate their buck file
           okbuckExt
@@ -291,16 +308,22 @@ public class OkBuckGradlePlugin implements Plugin<Project> {
                   bp -> {
                     bp.getConfigurations().maybeCreate(BUCK_LINT);
 
-                    Task okbuckProjectTask = bp.getTasks().maybeCreate(OKBUCK);
-                    okbuckProjectTask.doLast(
-                        task -> {
-                          ProjectCache.initScopeCache(bp);
-                          BuckFileGenerator.generate(
-                              bp, buckFileManager, okbuckExt.getVisibilityExtension());
-                          ProjectCache.resetScopeCache(bp);
+                    TaskProvider<Task> okbuckProjectTaskProvider = bp.getTasks().register(OKBUCK);
+                    okbuckProjectTaskProvider.configure(
+                        okbuckProjectTask -> {
+                          okbuckProjectTask.doLast(
+                              task -> {
+                                ProjectCache.initScopeCache(bp);
+                                BuckFileGenerator.generate(
+                                    bp, buckFileManager, okbuckExt.getVisibilityExtension());
+                                ProjectCache.resetScopeCache(bp);
+                              });
+                          okbuckProjectTask.dependsOn(setupOkbuckTaskProvider);
                         });
-                    okbuckProjectTask.dependsOn(setupOkbuck);
-                    okBuckClean.dependsOn(okbuckProjectTask);
+                    okBuckCleanTaskProvider.configure(
+                        okBuckCleanTask -> {
+                          okBuckCleanTask.dependsOn(okbuckProjectTaskProvider);
+                        });
                   });
         });
   }
